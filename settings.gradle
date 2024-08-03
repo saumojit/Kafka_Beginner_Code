@@ -1,0 +1,9 @@
+rootProject.name = 'Kafka_Beginner_Code'
+include 'kafka-basics'
+include 'kafka-producer-wikimedia'
+include 'kafka-consumer-opensearch'
+include 'kafka-streams-wikimedia'
+include 'kafka-streams-wikimedia:untitled'
+findProject(':kafka-streams-wikimedia:untitled')?.name = 'untitled'
+include 'kafka-streams'
+

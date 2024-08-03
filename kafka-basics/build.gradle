@@ -1,0 +1,37 @@
+plugins {
+    id 'java'
+    id 'application'  // Apply the application plugin
+}
+group = 'sample.kafka'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // https://mvnrepository.com/artifact/org.apache.kafka/kafka-clients
+    implementation 'org.apache.kafka:kafka-clients:3.0.0'
+
+    // https://mvnrepository.com/artifact/org.slf4j/slf4j-api
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+
+    // https://mvnrepository.com/artifact/org.slf4j/slf4j-simple
+    implementation 'org.slf4j:slf4j-simple:1.7.36'
+
+}
+
+// Apply the application plugin
+application {
+    // Specify the fully qualified main class name
+
+    // de-parameterized
+    // mainClass = 'sample.kafka.ProducerDemo'  // Replace with your actual main class
+
+    // parameterized -- command --> ./gradlew run -Dclass='ProducerKeysDemo'
+    mainClass = 'sample.kafka.' + System.properties['class']  // Replace with your actual main class
+}
+
+
+test {
+    useJUnitPlatform()
+}
