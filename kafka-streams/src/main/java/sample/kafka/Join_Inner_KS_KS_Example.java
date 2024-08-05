@@ -1,25 +1,26 @@
 package sample.kafka;
 
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.ListTopicsResult;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
 import org.apache.kafka.streams.kstream.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.clients.admin.AdminClientConfig;
-import org.apache.kafka.clients.admin.ListTopicsResult;
-import org.apache.kafka.streams.Topology;
-import org.apache.kafka.streams.StreamsConfig;
-import org.apache.kafka.streams.KafkaStreams;
-import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
-import java.util.*;
-import java.util.concurrent.ExecutionException;
-
 import sample.kafka.beans.JoinedRecord;
 import sample.kafka.serdes_custom_generic.CustomSerdes;
 
-public class Join_Inner_KS_KT_Example {
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.ExecutionException;
+
+public class Join_Inner_KS_KS_Example {
     private static final Properties properties;
     static final String topic1 =  "topic1";
     static final String topic2 =  "topic2";
@@ -33,7 +34,7 @@ public class Join_Inner_KS_KT_Example {
         properties.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
         properties.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
         properties.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass());
-        properties.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG , "3000");
+        // properties.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG , "3000");
         // parallelism -- (optional)
         properties.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, "1");
 
@@ -92,10 +93,12 @@ public class Join_Inner_KS_KT_Example {
     static void processorFunctionLogic(final StreamsBuilder builder) {
         final KStream<String, String> stream1 = builder.stream(topic1);
         stream1.peek((key, value) -> System.out.println("I1-put Key and Value Input => " +  key + " : "+ value));
-        final KTable<String, String> table2 = builder.table(topic2 , Materialized.as("stream2"));
-        table2.toStream().peek((key, value) -> System.out.println("I2-put Key and Value Input => " +  key + " : "+ value));
+        final KStream<String, String> stream2 = builder.stream(topic2);
+        stream2.peek((key, value) -> System.out.println("I2-put Key and Value Input => " +  key + " : "+ value));
         ValueJoiner<String , String , JoinedRecord> valueJoiner = JoinedRecord::new;
-        final KStream<String, JoinedRecord> stream_joined = stream1.join(table2 , valueJoiner).peek((key, value) -> System.out.println("O-put Key and Value Input => " +  key + " : "+ value));
+        JoinWindows joinwindow_of_5s = JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(30)); // unlike ktable , for kstream_to_stream we have joining window concept (with or w/o grace)
+        StreamJoined joinedParams = StreamJoined.with(Serdes.String() ,Serdes.String() , Serdes.String() );
+        final KStream<String, JoinedRecord> stream_joined = stream1.join(stream2 , valueJoiner , joinwindow_of_5s , joinedParams).peek((key, value) -> System.out.println("O-put Key and Value Input => " +  key + " : "+ value));
         stream_joined.to(joined_topic_12 , Produced.with(Serdes.String() , CustomSerdes.joinedRecordSerdes()));
     }
 }
@@ -105,13 +108,14 @@ public class Join_Inner_KS_KT_Example {
 // Producer1 Input ==> A : Apple
 // Producer2 =>  kafka-console-producer.sh --bootstrap-server localhost:9092 --topic topic2 --property parse.key=true --property key.separator=:
 // Producer2 Input ==> A : It is a vowel
-// Streams =>   ./gradlew :kafka-streams:run -Dclass='Join_Inner_KS_KT_Example'
+// Streams =>   ./gradlew :kafka-streams:run -Dclass='Join_Inner_KS_KS_Example'
 // Consumer =>  kafka-console-consumer.sh --topic joined_topic_12 --bootstrap-server localhost:9092 --property print.key=true --from-beginning
 // Consumer Output ==> A       {"val1":" ALL","val2":" It is a vowel"}
 
 
-// About : ############ Following Code : Ktable to Kstream Joining (Inner) ################
-// Joining triggers only if Ktable has the data and then Kstream has the data on same key
-// Joining will not trigger if data changes on Ktable on same key
-// Joining will trigger if data changes on Kstream on same key
+// About : ############ Following Code : Kstream to Kstream Joining (Inner) ################
+// Joining is based on timeframe specified as joining window and same key
+// Once a record with key submitted to one Kstream , then joining_window starts for other Kstream
+// For joining to happen , in other Kstream a record with same key must appear within join_window
+// To observe joining in effect , trying with 30s join-window
 

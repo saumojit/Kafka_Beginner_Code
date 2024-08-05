@@ -1,25 +1,25 @@
 package sample.kafka;
 
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.ListTopicsResult;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
 import org.apache.kafka.streams.kstream.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.clients.admin.AdminClientConfig;
-import org.apache.kafka.clients.admin.ListTopicsResult;
-import org.apache.kafka.streams.Topology;
-import org.apache.kafka.streams.StreamsConfig;
-import org.apache.kafka.streams.KafkaStreams;
-import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
-import java.util.*;
-import java.util.concurrent.ExecutionException;
-
 import sample.kafka.beans.JoinedRecord;
 import sample.kafka.serdes_custom_generic.CustomSerdes;
 
-public class Join_Inner_KS_KT_Example {
+import java.util.*;
+import java.util.concurrent.ExecutionException;
+
+public class Join_Inner_KT_KT_Example {
     private static final Properties properties;
     static final String topic1 =  "topic1";
     static final String topic2 =  "topic2";
@@ -29,7 +29,7 @@ public class Join_Inner_KS_KT_Example {
     // Kafka-Streams Properties
     static {
         properties = new Properties();
-        properties.put(StreamsConfig.APPLICATION_ID_CONFIG, "json_uppercase_app");
+        properties.put(StreamsConfig.APPLICATION_ID_CONFIG, "joining_kt_kt_i");
         properties.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
         properties.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
         properties.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass());
@@ -90,13 +90,14 @@ public class Join_Inner_KS_KT_Example {
     }
 
     static void processorFunctionLogic(final StreamsBuilder builder) {
-        final KStream<String, String> stream1 = builder.stream(topic1);
-        stream1.peek((key, value) -> System.out.println("I1-put Key and Value Input => " +  key + " : "+ value));
-        final KTable<String, String> table2 = builder.table(topic2 , Materialized.as("stream2"));
+        final KTable<String, String> table1 = builder.table(topic1 , Materialized.as("table1"));
+        table1.toStream().peek((key, value) -> System.out.println("I1-put Key and Value Input => " +  key + " : "+ value));
+        final KTable<String, String> table2 = builder.table(topic2 , Materialized.as("table2"));
         table2.toStream().peek((key, value) -> System.out.println("I2-put Key and Value Input => " +  key + " : "+ value));
         ValueJoiner<String , String , JoinedRecord> valueJoiner = JoinedRecord::new;
-        final KStream<String, JoinedRecord> stream_joined = stream1.join(table2 , valueJoiner).peek((key, value) -> System.out.println("O-put Key and Value Input => " +  key + " : "+ value));
-        stream_joined.to(joined_topic_12 , Produced.with(Serdes.String() , CustomSerdes.joinedRecordSerdes()));
+        final KTable<String, JoinedRecord> stream_joined = table1.join(table2 , valueJoiner);
+        stream_joined.toStream().peek((key, value) -> System.out.println("O-put Key and Value Input => " +  key + " : "+ value));
+        stream_joined.toStream().to(joined_topic_12 , Produced.with(Serdes.String() , CustomSerdes.joinedRecordSerdes()));
     }
 }
 
@@ -110,7 +111,7 @@ public class Join_Inner_KS_KT_Example {
 // Consumer Output ==> A       {"val1":" ALL","val2":" It is a vowel"}
 
 
-// About : ############ Following Code : Ktable to Kstream Joining (Inner) ################
+// About : ############ Following Code : Ktable to Ktable Joining (Inner) ################
 // Joining triggers only if Ktable has the data and then Kstream has the data on same key
 // Joining will not trigger if data changes on Ktable on same key
 // Joining will trigger if data changes on Kstream on same key
